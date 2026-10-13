@@ -64,9 +64,9 @@ especially for secondary legislation. The main codes are included, for example:
   - 22 per-chapter pages of the Iranian Constitution (the full text comes from
     `/fa/content/iran_constitution` instead);
   - 49 captures with no or empty text.
-- **About 870 law ids** had no usable capture: every capture was a bot-challenge page, an
+- **About 760 law ids** had no usable capture: every capture was a bot-challenge page, an
   "invalid session" error, or failed to load.
-- **No official English text** is included. The Research Center does not publish one.
+- **No official English text** is included: none was available from the source.
 - **Source quirks, kept as they are:**
   - Pre-2013 texts are hard-wrapped like the printed gazette.
   - In some recent texts (about 2015–2022) the gazette header, with the number and date, is
@@ -97,9 +97,8 @@ each layout.
 
 ## Licence / copyright
 
-Laws and regulations are official texts. Iran's Law for the Protection of Authors', Composers'
-and Artists' Rights (1348) does not cover official legislative texts. The Research Center's
-pages carry a general copyright notice for the site. LawCodex reproduces only the legislative
+Laws and regulations are official texts, which are generally not subject to copyright. The
+Research Center's pages carry a general copyright notice for the site. LawCodex reproduces only the legislative
 texts, unchanged, each with a link to its official page.
 
 ## Regenerate
