@@ -49,7 +49,8 @@ def norm(s):
 
 
 def field(h, label):
-    m = re.search(r"<h3[^>]*>\s*" + re.escape(label) + r"\s*:\s*</h3>\s*(?:<a[^>]*>)?([^<]*)", h)
+    m = re.search(r"(?:<h3[^>]*>|<span class=\"db\">)\s*" + re.escape(label)
+                  + r"\s*:\s*(?:</h3>)?\s*(?:<a[^>]*>)?([^<]*)", h)
     return norm(html.unescape(m.group(1))) if m else None
 
 
@@ -124,15 +125,21 @@ def to_md(lines):
 
 
 def parse(h):
-    if "normal-text" not in h:
-        return None
     s = BeautifulSoup(h, "lxml")
     div = s.find("div", class_="normal-text")
-    h2 = None
-    h1 = s.find("h1", string=re.compile("اطلاعات کامل قانون"))
-    if h1:
-        h2 = h1.find_next("h2")
-    title = norm(h2.get_text(" ", strip=True)) if h2 else None
+    title = None
+    if div is not None:                      # site design until ~2013
+        h1 = s.find("h1", string=re.compile("اطلاعات کامل قانون"))
+        h2 = h1.find_next("h2") if h1 else None
+        title = norm(h2.get_text(" ", strip=True)) if h2 else None
+    else:                                    # site design ~2014-2022
+        div = s.find("div", id="ltab1")
+        if div is None:
+            return None
+        h4 = div.find("h4", class_="news-header")
+        if h4 is not None:
+            title = norm(h4.get_text(" ", strip=True))
+            h4.decompose()
     if not title:
         t = s.find("title")
         title = norm(re.sub(r"^مرکز پژوهشها\s*-\s*", "", t.get_text(" ", strip=True))) if t else ""
