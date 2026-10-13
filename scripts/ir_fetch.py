@@ -23,6 +23,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CDX = ("https://web.archive.org/cdx/search/cdx?url=rc.majlis.ir/fa/law/show/&matchType=prefix"
        "&filter=statuscode:200&fl=original,timestamp&limit=500000")
 
+CONSTITUTION = ("https://web.archive.org/web/20220409043635id_/"
+                "https://rc.majlis.ir/fa/content/iran_constitution")
 S = requests.Session()
 S.headers["User-Agent"] = UA
 
@@ -74,6 +76,11 @@ def main():
     a = ap.parse_args()
     out = os.path.join(a.raw, "html")
     os.makedirs(out, exist_ok=True)
+    cfn = os.path.join(a.raw, "constitution.html")
+    if not os.path.exists(cfn):
+        r = get(CONSTITUTION)
+        if r is not None:
+            open(cfn, "wb").write(r.content)
     caps = captures(a.raw)
     jobs = []
     for i, lst in sorted(caps.items()):

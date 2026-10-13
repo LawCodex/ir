@@ -38,6 +38,8 @@ AUTH_DIRS = [
     ("کمیسیون", "commissions"),
     ("دیوان عالی کشور", "supreme-court-precedents"),
     ("دیوان عدالت اداری", "administrative-court"),
+    ("قوه قضاییه", "judiciary"),
+    ("آیین نامه داخلی مجلس", "laws"),
     ("شورای نگهبان", "guardian-council"),
 ]
 
@@ -49,8 +51,8 @@ def norm(s):
 
 
 def field(h, label):
-    m = re.search(r"(?:<h3[^>]*>|<span class=\"db\">)\s*" + re.escape(label)
-                  + r"\s*:\s*(?:</h3>)?\s*(?:<a[^>]*>)?([^<]*)", h)
+    m = re.search(r"(?:<h3[^>]*>|<span class=\"db\">|<b class=\"text-majlis\">)\s*" + re.escape(label)
+                  + r"\s*:\s*(?:</h3>|</b>)?\s*(?:<span[^>]*>)?\s*(?:<a[^>]*>)?([^<]*)", h)
     return norm(html.unescape(m.group(1))) if m else None
 
 
@@ -132,7 +134,17 @@ def parse(h):
         h1 = s.find("h1", string=re.compile("اطلاعات کامل قانون"))
         h2 = h1.find_next("h2") if h1 else None
         title = norm(h2.get_text(" ", strip=True)) if h2 else None
-    else:                                    # site design ~2014-2022
+    elif s.find("div", class_="law_text") is not None:   # site design ~2021-2022
+        div = s.find("div", class_="law_text")
+        h5 = s.select_one("div.bg-majlis h5")
+        title = norm(h5.get_text(" ", strip=True)) if h5 else None
+    elif s.select_one("#right-tabs div.tab") is not None:  # site design ~2013-2014
+        div = s.select_one("#right-tabs div.tab")
+        h3 = div.find("h3", class_="gray")
+        if h3 is not None:
+            title = norm(h3.get_text(" ", strip=True))
+            h3.decompose()
+    else:                                    # site design ~2014-2021
         div = s.find("div", id="ltab1")
         if div is None:
             return None
@@ -145,7 +157,7 @@ def parse(h):
         title = norm(re.sub(r"^مرکز پژوهشها\s*-\s*", "", t.get_text(" ", strip=True))) if t else ""
     raw = div.decode_contents()
     raw = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", "", raw)
-    parts = re.split(r"(?i)<br\s*/?>|</p>|</div>|</tr>", raw)
+    parts = re.split(r"(?i)<br\s*/?>|</p>|</div>|</tr>|\n", raw)
     lines = []
     for p in parts:
         t = norm(html.unescape(re.sub(r"<[^>]+>", "", p)))
@@ -160,7 +172,75 @@ def parse(h):
     return title, lines, meta
 
 
+UNITS = {"اول", "دوم", "سوم", "چهارم", "پنجم", "ششم", "هفتم", "هشتم", "نهم", "دهم", "یازدهم",
+         "دوازدهم", "سیزدهم", "چهاردهم", "پانزدهم", "شانزدهم", "هفدهم", "هجدهم", "هیجدهم", "نوزدهم",
+         "بیستم", "سی‌ام", "سیم", "چهلم", "پنجاهم", "شصتم", "هفتادم", "هشتادم", "نودم", "صدم", "یکصدم",
+         "یکم", "و", "یکصد", "صد", "بیست", "سی", "چهل", "پنجاه", "شصت", "هفتاد", "هشتاد", "نود", "یک",
+         "دو", "سه", "چهار", "پنج", "شش", "هفت", "هشت", "نه", "ده", "یازده", "دوازده", "سیزده",
+         "چهارده", "پانزده", "شانزده", "هفده", "هجده", "نوزده"}
+
+
+def constitution():
+    fn = os.path.join(RAW, "constitution.html")
+    if not os.path.exists(fn):
+        return 0
+    s = BeautifulSoup(open(fn, "rb").read().decode("utf-8", "replace"), "lxml")
+    el = s.find(string=lambda x: x and "یکصد و هفتاد و هفتم" in x)
+    div = el.find_parent("div", class_="mt-4")
+    raw = re.split(r"(?i)<br\s*/?>|</p>|</div>", div.decode_contents())
+    lines = []
+    for p in raw:
+        t = html.unescape(re.sub(r"<[^>]+>", "", p))
+        t = re.sub(r"[\u200e\u200f]", "", t).replace("\xa0", " ")
+        t = re.sub(r"\s+", " ", t).strip()
+        if t:
+            lines.append(t)
+    out = []
+    seen = set()
+    for ln in lines:
+        m = re.match(r"^اصل\s*([^:]{1,40}?)\s*:\s*(.*)$", ln)
+        words = ln.split()
+        lab = "اصل " + re.sub(r"\s+", " ", m.group(1)).strip() if m else None
+        if m and not m.group(1).strip().startswith("سابق") and lab not in seen \
+                and re.search(r"(م|اول|سی|صد|ام)$", lab):
+            seen.add(lab)
+            out += ["", "##### " + lab, ""]
+            if m.group(2):
+                out.append(esc(m.group(2)))
+            continue
+        if words and words[0] == "اصل" and len(words) > 2:
+            k = 1
+            while k < len(words) and k < 7 and words[k] in UNITS:
+                k += 1
+            if k > 1 and (words[k - 1] != "و") and " ".join(words[:k]) not in seen:
+                seen.add(" ".join(words[:k]))
+                out += ["", "##### " + " ".join(words[:k]), ""]
+                rest = " ".join(words[k:]).lstrip(":- ")
+                if rest:
+                    out.append(esc(rest))
+                continue
+        if re.match(r"^(فصل\s|مقدمه$)", ln) and len(ln) < 90:
+            out += ["", "### " + ln, ""]
+            continue
+        out.append(esc(ln))
+    body = re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip() + "\n"
+    fm = {"title": "قانون اساسی جمهوری اسلامی ایران", "identifier": "rc.majlis.ir:iran_constitution",
+          "type": "constitution", "approving_authority": "همه‌پرسی (referendum)", "jurisdiction": "ir",
+          "language": "fa", "date": "1979-12-03", "date_solar_hijri": "1358/09/12",
+          "last_amended": "1989-07-28", "last_amended_solar_hijri": "1368/05/06", "status": "in_force",
+          "source": "https://rc.majlis.ir/fa/content/iran_constitution",
+          "archived": "https://web.archive.org/web/20220409043635/https://rc.majlis.ir/fa/content/iran_constitution",
+          "retrieved": RETRIEVED}
+    path = os.path.join(OUT, "fa", "constitution", "1358-constitution.md")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("---\n" + yaml.safe_dump(fm, allow_unicode=True, sort_keys=False, width=1000) + "---\n\n")
+        f.write("# قانون اساسی جمهوری اسلامی ایران\n\n" + body)
+    return body.count("\n##### ")
+
+
 def main():
+    print("constitution articles:", constitution())
     counts = collections.Counter()
     skipped = []
     for fn in sorted(glob.glob(os.path.join(RAW, "html", "*.html")), key=lambda x: int(os.path.basename(x)[:-5])):
@@ -175,9 +255,13 @@ def main():
             skipped.append([i, "empty text"])
             continue
         auth = meta.get("authority") or ""
+        if "قانون اساسی کشور" in auth:
+            skipped.append([i, "foreign constitution (قانون اساسی کشور ها)"])
+            continue
+        if title.startswith("قانون اساسی جمهوری اسلامی ایران") or auth.startswith("قانون اساسی جمهوری اسلامی"):
+            skipped.append([i, "constitution chapter page (full text taken from /fa/content/iran_constitution)"])
+            continue
         d = next((v for k, v in AUTH_DIRS if k in auth), "other")
-        if i == 133613 or title.startswith("قانون اساسی جمهوری اسلامی"):
-            d = "constitution"
         appr = jdate(meta.get("approved"))
         year = appr[:4] if appr else "undated"
         fm = {
